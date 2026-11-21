@@ -6,35 +6,33 @@
   },
   "description": "Simple analytics tracking for WaveformPlayer",
   "type": "module",
-  "main": "dist/waveform-tracker.cjs",
-  "module": "dist/waveform-tracker.esm.js",
+  "main": "dist/waveform-tracker.esm.js",
+  "unpkg": "dist/waveform-tracker.min.js",
   "types": "./types/index.d.ts",
   "exports": {
     ".": {
       "types": "./types/index.d.ts",
       "import": "./dist/waveform-tracker.esm.js",
-      "require": "./dist/waveform-tracker.cjs",
       "default": "./dist/waveform-tracker.esm.js"
     },
     "./dist/*": "./dist/*",
-    "./src/*": "./src/*",
     "./package.json": "./package.json"
   },
   "files": [
     "dist/",
     "src/",
     "types/",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
-    "build": "npm run build:iife && npm run build:esm && npm run build:cjs && npm run build:min && npm run build:types",
-    "build:iife": "esbuild src/index.ts --bundle --format=iife --tsconfig=tsconfig.esbuild.json --outfile=dist/waveform-tracker.js",
-    "build:esm": "esbuild src/index.ts --bundle --format=esm --tsconfig=tsconfig.esbuild.json --outfile=dist/waveform-tracker.esm.js",
-    "build:cjs": "esbuild src/index.ts --bundle --format=cjs --tsconfig=tsconfig.esbuild.json --outfile=dist/waveform-tracker.cjs",
-    "build:min": "esbuild src/index.ts --bundle --format=iife --minify --tsconfig=tsconfig.esbuild.json --outfile=dist/waveform-tracker.min.js",
-    "dev": "esbuild src/index.ts --bundle --format=iife --tsconfig=tsconfig.esbuild.json --outfile=dist/waveform-tracker.js --watch",
+    "build": "npm run build:iife && npm run build:esm && npm run build:min && npm run build:types",
+    "build:iife": "esbuild src/index.ts --bundle --format=iife --outfile=dist/waveform-tracker.js",
+    "build:esm": "esbuild src/index.ts --bundle --format=esm --outfile=dist/waveform-tracker.esm.js",
+    "build:min": "esbuild src/index.ts --bundle --format=iife --minify --outfile=dist/waveform-tracker.min.js",
+    "dev": "esbuild src/index.ts --bundle --format=iife --outfile=dist/waveform-tracker.js --watch",
     "serve": "npx http-server -p 8000",
     "prepublishOnly": "npm test && npm run build",
     "build:types": "rm -rf types && tsc -p tsconfig.build.json",
@@ -55,6 +53,15 @@
     "type": "git",
     "url": "git+https://github.com/WaveformPlayer/waveform-tracker.git"
   },
+  "engines": {
+    "node": ">=22.12"
+  },
+  "sideEffects": [
+    "./dist/waveform-tracker.esm.js",
+    "./dist/waveform-tracker.js",
+    "./dist/waveform-tracker.min.js",
+    "./src/index.ts"
+  ],
   "peerDependencies": {
     "@arraypress/waveform-player": "^1.8.0"
   },

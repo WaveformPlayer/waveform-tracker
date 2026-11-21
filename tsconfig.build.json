@@ -5,6 +5,7 @@
     "declaration": true,
     "emitDeclarationOnly": true,
     "stripInternal": true,
+    "declarationMap": true,
     "allowJs": false,
     "outDir": "types",
     "rootDir": "src"

@@ -137,3 +137,4 @@ declare class WaveformTracker {
 declare const tracker: WaveformTracker;
 export default tracker;
 export type { WaveformTracker };
+//# sourceMappingURL=index.d.ts.map

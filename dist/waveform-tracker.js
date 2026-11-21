@@ -1,5 +1,6 @@
+"use strict";
 (() => {
-  // src/index.js
+  // src/index.ts
   var WaveformTracker = class _WaveformTracker {
     constructor() {
       this.config = null;
@@ -12,7 +13,7 @@
      * Initialize tracker with configuration. Calling it again reconfigures
      * the tracker (players already tracked keep their state) rather than
      * adding a second set of listeners.
-     * @param {Object} config - Tracker configuration
+     * @param config - Tracker configuration
      */
     init(config = {}) {
       this.config = {
@@ -64,7 +65,7 @@
     }
     /**
      * Track a specific player instance
-     * @param {WaveformPlayer} player - Player instance to track
+     * @param player - Player instance to track
      */
     trackPlayer(player) {
       if (!this.config) {
@@ -163,7 +164,8 @@
      * Engagement and sent events are per track, but a player instance can
      * outlive many tracks. Without this, a track swapped in mid-play inherited
      * the previous track's elapsed time and never re-sent play/listen/complete.
-     * @param {Object} tracker - Tracker state for a player
+     * @param tracker - Tracker state for a player
+     * @internal
      */
     syncTrack(tracker2) {
       const url = tracker2.player.options?.url;
@@ -185,8 +187,9 @@
      * time that passed: background tabs throttle the player's timeupdates, so
      * minutes of real listening can arrive as one jump. Anything clearly
      * beyond elapsed real time is a seek and isn't credited.
-     * @param {Object} tracker - Tracker state for a player
-     * @param {number} currentTime - Playhead position (seconds)
+     * @param tracker - Tracker state for a player
+     * @param currentTime - Playhead position (seconds)
+     * @internal
      */
     accumulate(tracker2, currentTime) {
       const now = Date.now();
@@ -203,8 +206,9 @@
      * Most media time (seconds) that could have played since lastWall: the
      * wall time at the current rate, with 50% headroom for timer jitter plus
      * SEEK_SLACK. External mode has no audio element, so assumes 1x.
-     * @param {Object} tracker - Tracker state for a player
-     * @param {number} now - Current Date.now()
+     * @param tracker - Tracker state for a player
+     * @param now - Current Date.now()
+     * @internal
      */
     playableSince(tracker2, now) {
       const wall = (now - tracker2.lastWall) / 1e3;
@@ -213,9 +217,10 @@
     }
     /**
      * Fire any play/listen/complete events whose threshold has been reached.
-     * @param {Object} tracker - Tracker state for a player
-     * @param {number} currentTime - Playhead position (seconds)
-     * @param {number} duration - Track duration (seconds)
+     * @param tracker - Tracker state for a player
+     * @param currentTime - Playhead position (seconds)
+     * @param duration - Track duration (seconds)
+     * @internal
      */
     checkEvents(tracker2, currentTime, duration) {
       if (!this.config) return;
@@ -241,8 +246,9 @@
      * Normalise an events threshold. A missing key, null or false disables
      * the event; 0 is a real threshold (fire on the first check after play).
      * Numeric strings are accepted, as the old truthy check did.
-     * @param {*} value - Configured threshold
-     * @returns {number|null} The threshold, or null when disabled
+     * @param value - Configured threshold
+     * @returns The threshold, or null when disabled
+     * @internal
      */
     threshold(value) {
       if (value == null || value === false || value === "") return null;
@@ -253,7 +259,8 @@
      * Run the event checks unthrottled at the last known position, so
      * thresholds crossed inside the 1s throttle window aren't lost when
      * playback stops (pause) or tracking ends (untrack/destroy).
-     * @param {Object} tracker - Tracker state for a player
+     * @param tracker - Tracker state for a player
+     * @internal
      */
     flush(tracker2) {
       if (!tracker2.isTracking) return;
@@ -263,7 +270,7 @@
     }
     /**
      * Stop tracking a specific player
-     * @param {WaveformPlayer} player - Player instance to stop tracking
+     * @param player - Player instance to stop tracking
      */
     untrackPlayer(player) {
       const tracker2 = this.trackers.get(player);
@@ -281,6 +288,7 @@
     }
     /**
      * Send tracking event
+     * @internal
      */
     sendEvent(tracker2, eventType, time, duration) {
       if (!tracker2.player?.options?.url) {
@@ -338,9 +346,10 @@
      * fetch uses credentials only same-origin, so a wildcard endpoint that
      * answers the preflight for Content-Type works.
      *
-     * @param {string} endpoint - Destination URL
-     * @param {Object} payload - Event payload
-     * @param {boolean} terminal - Whether this is a terminal/near-unload event
+     * @param endpoint - Destination URL
+     * @param payload - Event payload
+     * @param terminal - Whether this is a terminal/near-unload event
+     * @internal
      */
     send(endpoint, payload, terminal = false) {
       const body = JSON.stringify(payload);
@@ -376,8 +385,9 @@
      * Whether a terminal event may go by sendBeacon: the API exists, no
      * custom headers are configured (a beacon can't set them), and the
      * endpoint is same-origin or fetch is unavailable (see send()).
-     * @param {string} endpoint - Destination URL
-     * @param {boolean} hasFetch - Whether fetch is available
+     * @param endpoint - Destination URL
+     * @param hasFetch - Whether fetch is available
+     * @internal
      */
     canBeacon(endpoint, hasFetch) {
       const hasCustomHeaders = this.config.headers && Object.keys(this.config.headers).length > 0;
@@ -388,7 +398,8 @@
     }
     /**
      * Whether an endpoint (absolute or relative) is on the page's origin.
-     * @param {string} endpoint - Destination URL
+     * @param endpoint - Destination URL
+     * @internal
      */
     isSameOrigin(endpoint) {
       try {
@@ -399,12 +410,14 @@
     }
     /**
      * Generate session ID
+     * @internal
      */
     generateSessionId() {
       return Math.random().toString(36).substring(2) + Date.now().toString(36);
     }
     /**
      * Debug logging - only emitted when debug mode is enabled.
+     * @internal
      */
     log(...args) {
       if (this.debug) {
@@ -414,6 +427,7 @@
     /**
      * Recoverable / configuration warning - always emitted so integration
      * mistakes surface even when debug mode is off.
+     * @internal
      */
     warn(...args) {
       console.warn("[WaveformTracker]", ...args);
@@ -421,6 +435,7 @@
     /**
      * Genuine failure - always emitted so dropped events and thrown handlers
      * surface even when debug mode is off.
+     * @internal
      */
     error(...args) {
       console.error("[WaveformTracker]", ...args);
