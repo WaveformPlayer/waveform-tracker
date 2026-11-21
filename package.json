@@ -47,7 +47,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/arraypress/waveform-tracker.git"
+    "url": "git+https://github.com/WaveformPlayer/waveform-tracker.git"
   },
   "peerDependencies": {
     "@arraypress/waveform-player": "^1.8.0"
