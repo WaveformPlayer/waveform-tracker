@@ -37,7 +37,9 @@
     "dev": "esbuild src/index.ts --bundle --format=iife --tsconfig=tsconfig.esbuild.json --outfile=dist/waveform-tracker.js --watch",
     "serve": "npx http-server -p 8000",
     "prepublishOnly": "npm test && npm run build",
-    "build:types": "rm -rf types && tsc -p tsconfig.build.json"
+    "build:types": "rm -rf types && tsc -p tsconfig.build.json",
+    "lint": "biome lint",
+    "typecheck": "tsc -p ."
   },
   "keywords": [
     "audio",
@@ -57,6 +59,7 @@
     "@arraypress/waveform-player": "^1.8.0"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.6.8",
     "esbuild": "^0.28.2",
     "jsdom": "^31.0.1",
     "typescript": "^7.0.2",

@@ -1,0 +1,35 @@
+{
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+  "files": { "includes": ["src/**", "test/**"] },
+  // Off for 2.0: reformatting is its own change, once a style is chosen
+  // (src indents 4 spaces, tests use tabs).
+  "formatter": { "enabled": false },
+  "assist": { "enabled": false },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended",
+      // 2.0 ships 1.1.0's exact code (the built bundles are compared with
+      // comments stripped). Every rule below is off because its fix would
+      // change emitted code, or because it contradicts something deliberate.
+      // The same policy as waveform-player's; revisit them together after
+      // 2.0, each with its own tests.
+      "style": {
+        "noNonNullAssertion": "off" // deliberate: each `!` marks where the code relies on init() or an earlier timeupdate having run
+      },
+      "suspicious": {
+        "useIterableCallbackReturn": "off" // expression-bodied forEach callbacks; a block body is different code
+      },
+      "correctness": {
+        "noUnusedVariables": "off", // the unused `catch (error)` binding; `catch {}` or a rename is different code
+        "noUnusedFunctionParameters": "off"
+      },
+      "complexity": {
+        // `a && a.b` and `a?.b` differ when a is 0 or "", and
+        // `typeof WaveformPlayer !== 'undefined' && ...` guards an undeclared global
+        "useOptionalChain": "off"
+      }
+    }
+  }
+}
