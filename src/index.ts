@@ -72,7 +72,7 @@ export interface WaveformTrackerConfig {
  */
 export interface WaveformTrackerPlayer {
     container: HTMLElement;
-    options: {url?: string; title?: string};
+    options: {url?: string | null; title?: string | null};
     audio?: HTMLMediaElement | null;
 }
 
@@ -107,7 +107,7 @@ interface TimeDetail {
 /** Per-player tracking state. */
 interface TrackerState {
     player: WaveformTrackerPlayer;
-    url: string | undefined;
+    url: string | null | undefined;
     lastTime: number | null;
     lastWall: number | null;
     elapsedTime: number;

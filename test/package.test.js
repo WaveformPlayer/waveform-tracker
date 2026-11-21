@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, it, expect } from 'vitest';
-import { readFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { readFileSync, mkdtempSync, rmSync, existsSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { execSync } from 'node:child_process';
@@ -50,6 +50,17 @@ describe('package manifest', () => {
 		expect(outfileOf(pkg.scripts['build:cjs'])).toBe(pkg.main);
 		expect(outfileOf(pkg.scripts['build:esm'])).toBe(pkg.module);
 		expect(pkg.scripts.build).toContain('build:cjs');
+	});
+
+	it('ships the declarations generated from src, and points both resolvers at them', () => {
+		// Written by npm run build:types (tsc -p tsconfig.build.json).
+		expect(pkg.scripts.build).toContain('build:types');
+		expect(pkg.files).toContain('types/');
+		expect(pkg.types).toBe('./types/index.d.ts');
+		// `types` must come first in the condition list to be picked.
+		expect(Object.keys(pkg.exports['.'])[0]).toBe('types');
+		expect(pkg.exports['.'].types).toBe('./types/index.d.ts');
+		expect(existsSync(resolve(root, 'types/index.d.ts'))).toBe(true);
 	});
 
 	it('tests and rebuilds before publishing, so a stale dist cannot ship', () => {
