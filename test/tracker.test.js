@@ -518,11 +518,10 @@ describe('init/reset lifecycle', () => {
 });
 
 describe('terminal event delivery by origin', () => {
-	function deliver(endpoint, { withFetch = true, beaconResult = true } = {}) {
+	function deliver(endpoint, { beaconResult = true } = {}) {
 		const beacon = vi.fn(() => beaconResult);
 		Object.defineProperty(navigator, 'sendBeacon', { configurable: true, writable: true, value: beacon });
-		if (withFetch) globalThis.fetch = vi.fn(() => Promise.resolve());
-		else delete globalThis.fetch;
+		globalThis.fetch = vi.fn(() => Promise.resolve());
 
 		tracker.init({ endpoint, events: { listen: 5 }, session: false });
 		const p = fakePlayer();
@@ -549,10 +548,8 @@ describe('terminal event delivery by origin', () => {
 		expect(globalThis.fetch).not.toHaveBeenCalled();
 	});
 
-	it('falls back to sendBeacon cross-origin only when fetch is unavailable', () => {
-		const beacon = deliver('https://stats.example.com/collect', { withFetch: false });
-		expect(beacon).toHaveBeenCalledTimes(1);
-	});
+	// 2.0 dropped the cross-origin sendBeacon fallback for a page without
+	// fetch: every browser at the 2.0 floor has fetch.
 
 	it('falls back to fetch keepalive when sendBeacon refuses the payload', () => {
 		const beacon = deliver('/collect', { beaconResult: false });

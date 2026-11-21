@@ -40,7 +40,7 @@
           // Tear down trackers when a player is destroyed. Without this
           // the trackers Map keeps a strong reference to every player
           // (and its DOM) forever, leaking them in SPAs that
-          // create/destroy players (v1.8.0+).
+          // create/destroy players.
           destroy: (e) => {
             this.log("Player destroy event caught:", e.detail?.url);
             if (e.detail?.player) {
@@ -58,7 +58,7 @@
      * Track all existing WaveformPlayer instances
      */
     trackAllPlayers() {
-      if (typeof WaveformPlayer !== "undefined" && WaveformPlayer.getAllInstances) {
+      if (typeof WaveformPlayer !== "undefined") {
         const players = WaveformPlayer.getAllInstances();
         players.forEach((player) => this.trackPlayer(player));
       }
@@ -137,9 +137,7 @@
         ended: (e) => {
           if (!this.config) return;
           this.syncTrack(tracker2);
-          const detail = e.detail || {};
-          const duration = typeof detail.duration === "number" ? detail.duration : 0;
-          const currentTime = typeof detail.currentTime === "number" ? detail.currentTime : duration;
+          const { currentTime, duration } = e.detail;
           if (tracker2.isTracking) {
             this.accumulate(tracker2, currentTime);
           }
@@ -338,8 +336,7 @@
      * Content-Type: application/json; the endpoint and payload shape are
      * unchanged.
      *
-     * sendBeacon is used only for a same-origin endpoint (or when fetch is
-     * missing). Cross-origin, a beacon's JSON content type isn't
+     * sendBeacon is used only for a same-origin endpoint. Cross-origin, a beacon's JSON content type isn't
      * CORS-safelisted and beacons always send credentials, so an endpoint
      * answering Access-Control-Allow-Origin: * never receives the event —
      * yet sendBeacon still returns true, leaving no chance to fall back.
@@ -353,8 +350,7 @@
      */
     send(endpoint, payload, terminal = false) {
       const body = JSON.stringify(payload);
-      const hasFetch = typeof fetch === "function";
-      if (terminal && this.canBeacon(endpoint, hasFetch)) {
+      if (terminal && this.canBeacon(endpoint)) {
         try {
           const blob = new Blob([body], { type: "application/json" });
           if (navigator.sendBeacon(endpoint, blob)) {
@@ -364,10 +360,6 @@
         } catch (error) {
           this.log("sendBeacon failed, falling back to fetch:", error);
         }
-      }
-      if (!hasFetch) {
-        this.error("fetch is unavailable; event not delivered");
-        return;
       }
       fetch(endpoint, {
         method: "POST",
@@ -382,19 +374,19 @@
       });
     }
     /**
-     * Whether a terminal event may go by sendBeacon: the API exists, no
-     * custom headers are configured (a beacon can't set them), and the
-     * endpoint is same-origin or fetch is unavailable (see send()).
+     * Whether a terminal event may go by sendBeacon: the API exists (Firefox
+     * removes it when the `beacon.enabled` pref is off), no custom headers
+     * are configured (a beacon can't set them), and the endpoint is
+     * same-origin (see send()).
      * @param endpoint - Destination URL
-     * @param hasFetch - Whether fetch is available
      * @internal
      */
-    canBeacon(endpoint, hasFetch) {
+    canBeacon(endpoint) {
       const hasCustomHeaders = this.config.headers && Object.keys(this.config.headers).length > 0;
       if (hasCustomHeaders || typeof navigator === "undefined" || typeof navigator.sendBeacon !== "function") {
         return false;
       }
-      return !hasFetch || this.isSameOrigin(endpoint);
+      return this.isSameOrigin(endpoint);
     }
     /**
      * Whether an endpoint (absolute or relative) is on the page's origin.
