@@ -4,6 +4,53 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [2.0.0] — Unreleased
+
+### Added
+
+- **TypeScript declarations.** The package ships `types/index.d.ts`, generated
+  from the source, with declaration maps so "Go to definition" opens the
+  shipped TypeScript in `src/`. The config, payload, stats and player shapes
+  are exported as `WaveformTrackerConfig`, `WaveformTrackerPayload`,
+  `WaveformTrackerStats`, `WaveformTrackerPlayer` and friends. The 2.0 core's
+  `WaveformPlayer` fits `WaveformTrackerPlayer`, which the test suite checks
+  against the real core.
+
+### Changed
+
+- **Written in TypeScript.** Same behaviour as 1.1.0, apart from what is
+  listed here.
+- **Requires `@arraypress/waveform-player` 2.0** (peer `^2.0.0`). The tracker
+  reads the core's `waveformplayer:*` container events, which 2.0 still
+  dispatches (`waveformplayer:timeupdate` every animation frame while
+  playing, as in 1.x).
+- **Browser support is Chrome/Edge 111+, Firefox 114+ and Safari 16.4+**, as
+  for the core. The bundles are built for ES2022.
+- **The script-tag builds run in strict mode.** `waveform-tracker.js` and
+  `waveform-tracker.min.js` now start with `"use strict"`. The ES module
+  build always did, as every ES module does, so this is the same code under
+  the same rules it already ran with there.
+- **`main` is the ES module build**, and `unpkg` names the minified script-tag
+  build, so a bare `unpkg.com/@arraypress/waveform-tracker` URL serves a
+  script that runs from a `<script>` tag.
+
+### Removed
+
+- **The CommonJS build** (`dist/waveform-tracker.cjs`), the `require` export
+  condition and the `module` field. `require('@arraypress/waveform-tracker')`
+  still works: Node 22.12+ loads the ES module build through `require()`, and
+  `.default` is still the tracker. `engines` now says `>=22.12`.
+- **The `./src/*` export.** Deep imports of the raw source are no longer
+  resolvable; `src/` ships only for the declaration maps. `./dist/*` and
+  `./package.json` stay reachable.
+- **Fallbacks for older cores.** `init()` no longer checks that
+  `WaveformPlayer.getAllInstances` exists, and `ended` no longer copes with a
+  missing detail or missing times (cores before 1.8.0 sent none).
+- **The fallback for pages without `fetch`.** Every supported browser has it,
+  so a cross-origin terminal event always goes by `fetch` with `keepalive`.
+  `sendBeacon` is still used for a same-origin endpoint where the browser
+  offers it.
+
 ## [1.1.0] — 2026-09-24
 
 ### Fixed

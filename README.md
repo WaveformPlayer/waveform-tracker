@@ -29,6 +29,13 @@ WaveformTracker.init({
 });
 ```
 
+Version 2 needs `@arraypress/waveform-player` 2.0 and a browser from 2023 or
+later (Chrome/Edge 111, Firefox 114, Safari 16.4). TypeScript declarations are
+included. The package is ES modules only; on Node 22.12+ `require()` loads it
+too (`require('@arraypress/waveform-tracker').default`). For a `<script>` tag,
+load `dist/waveform-tracker.min.js` after the player; it sets
+`window.WaveformTracker`.
+
 ## Documentation
 
 Full configuration, payload shape and privacy notes live in the docs.
