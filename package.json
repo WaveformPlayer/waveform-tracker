@@ -27,11 +27,11 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "build": "npm run build:iife && npm run build:esm && npm run build:cjs && npm run build:min",
-    "build:iife": "esbuild src/index.js --bundle --format=iife --outfile=dist/waveform-tracker.js",
-    "build:esm": "esbuild src/index.js --bundle --format=esm --outfile=dist/waveform-tracker.esm.js",
-    "build:cjs": "esbuild src/index.js --bundle --format=cjs --outfile=dist/waveform-tracker.cjs",
-    "build:min": "esbuild src/index.js --bundle --format=iife --minify --outfile=dist/waveform-tracker.min.js",
-    "dev": "esbuild src/index.js --bundle --format=iife --outfile=dist/waveform-tracker.js --watch",
+    "build:iife": "esbuild src/index.js --bundle --format=iife --tsconfig=tsconfig.esbuild.json --outfile=dist/waveform-tracker.js",
+    "build:esm": "esbuild src/index.js --bundle --format=esm --tsconfig=tsconfig.esbuild.json --outfile=dist/waveform-tracker.esm.js",
+    "build:cjs": "esbuild src/index.js --bundle --format=cjs --tsconfig=tsconfig.esbuild.json --outfile=dist/waveform-tracker.cjs",
+    "build:min": "esbuild src/index.js --bundle --format=iife --minify --tsconfig=tsconfig.esbuild.json --outfile=dist/waveform-tracker.min.js",
+    "dev": "esbuild src/index.js --bundle --format=iife --tsconfig=tsconfig.esbuild.json --outfile=dist/waveform-tracker.js --watch",
     "serve": "npx http-server -p 8000",
     "prepublishOnly": "npm test && npm run build"
   },
@@ -53,8 +53,9 @@
     "@arraypress/waveform-player": "^1.8.0"
   },
   "devDependencies": {
-    "esbuild": "^0.28.1",
-    "jsdom": "^29.1.1",
-    "vitest": "^4.1.9"
+    "esbuild": "^0.28.2",
+    "jsdom": "^31.0.1",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.1"
   }
 }

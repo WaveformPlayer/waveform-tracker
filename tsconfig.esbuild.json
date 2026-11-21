@@ -1,0 +1,11 @@
+// The tsconfig esbuild reads when bundling (--tsconfig in the build scripts).
+// tsconfig.json is for tsc; its `strict` makes esbuild prepend "use strict"
+// to the IIFE and CJS bundles, which 1.x never had: sloppy -> strict mode is a
+// behaviour change. So the bundler gets only the options that shape its output.
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "useDefineForClassFields": true,
+    "verbatimModuleSyntax": true
+  }
+}
