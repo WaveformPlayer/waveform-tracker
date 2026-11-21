@@ -5,7 +5,168 @@
  * @license MIT
  */
 
+/** The events the tracker reports. */
+export type WaveformTrackerEvent = 'play' | 'listen' | 'complete';
+
+/**
+ * A threshold in `events`: a number turns the event on (`0` included), a
+ * missing key, `null` or `false` turns it off.
+ */
+export type WaveformTrackerThreshold = number | null | false;
+
+/** Which events fire and when. */
+export interface WaveformTrackerEvents {
+    /** Seconds of accumulated media time. */
+    play?: WaveformTrackerThreshold;
+    /** Seconds of accumulated media time. */
+    listen?: WaveformTrackerThreshold;
+    /** Percent (0-100) of the duration reached, with real listening behind it. */
+    complete?: WaveformTrackerThreshold;
+}
+
+/**
+ * What the tracker delivers for each event, to `handler` or as the JSON body
+ * POSTed to `endpoint`: `{ event, url, time, duration, page, ...metadata }`,
+ * then `session`, then `title`.
+ */
+export interface WaveformTrackerPayload {
+    event: WaveformTrackerEvent;
+    /** The player's `options.url`. */
+    url: string;
+    /** Whole media-seconds heard (play/listen), or the position (complete). */
+    time: number;
+    /** Whole seconds; `0` when unknown (a live stream, or before metadata). */
+    duration: number;
+    /** `window.location.pathname`. */
+    page: string;
+    /** Present when `session` is on. */
+    session?: string;
+    /** Present when the player has a title. */
+    title?: string;
+    /** Each key from `metadata`. */
+    [key: string]: unknown;
+}
+
+/** The options `init()` takes; supply `endpoint` or `handler`. */
+export interface WaveformTrackerConfig {
+    /** URL the events are POSTed to as JSON. */
+    endpoint?: string | null;
+    /** Delivers each payload instead of the network; `endpoint` is then never called. */
+    handler?: ((payload: WaveformTrackerPayload) => void) | null;
+    /** Defaults to `{ listen: 30 }`. */
+    events?: WaveformTrackerEvents;
+    /** Extra headers for the fetch POST (any header rules out sendBeacon). */
+    headers?: Record<string, string>;
+    /** Spread into every payload. */
+    metadata?: Record<string, unknown>;
+    /** An anonymous per-page session id on every payload (default `true`). */
+    session?: boolean;
+    /** Verbose console tracing; events are still delivered. */
+    debug?: boolean;
+}
+
+/**
+ * The player shape the tracker reads; a WaveformPlayer instance fits it.
+ * Its events are dispatched on `container`; `audio` is absent or null in
+ * external audio mode.
+ */
+export interface WaveformTrackerPlayer {
+    container: HTMLElement;
+    options: {url?: string; title?: string};
+    audio?: HTMLMediaElement | null;
+}
+
+/** One entry of `getStats()`, per tracked player. */
+export interface WaveformTrackerStats {
+    url: string;
+    title: string | null;
+    /** Accumulated media-seconds (a float). */
+    elapsedTime: number;
+    isTracking: boolean;
+    /** The events already sent for the current track. */
+    sentEvents: WaveformTrackerEvent[];
+}
+
+/** `init()`'s config with every default filled in. */
+interface ResolvedConfig {
+    endpoint: string | null;
+    handler: ((payload: WaveformTrackerPayload) => void) | null;
+    events: WaveformTrackerEvents;
+    headers: Record<string, string>;
+    metadata: Record<string, unknown>;
+    session: boolean;
+    debug: boolean;
+}
+
+/** The `{ currentTime, duration }` detail of timeupdate and ended. */
+interface TimeDetail {
+    currentTime: number;
+    duration: number;
+}
+
+/** Per-player tracking state. */
+interface TrackerState {
+    player: WaveformTrackerPlayer;
+    url: string | undefined;
+    lastTime: number | null;
+    lastWall: number | null;
+    elapsedTime: number;
+    lastPosition: number | null;
+    lastDuration: number | null;
+    sentEvents: Set<WaveformTrackerEvent>;
+    isTracking: boolean;
+    lastCheck: number | null;
+    handlers?: {
+        play: () => void;
+        pause: () => void;
+        timeupdate: (e: CustomEvent<TimeDetail>) => void;
+        ended: (e: CustomEvent<Partial<TimeDetail> | null>) => void;
+    };
+}
+
+/** The `waveformplayer:ready` / `:destroy` detail. */
+interface PlayerEventDetail {
+    player: WaveformTrackerPlayer;
+    url?: string;
+}
+
+/**
+ * The page's WaveformPlayer class, once its script has loaded; read only by
+ * trackAllPlayers(), behind a typeof check.
+ */
+declare const WaveformPlayer: {getAllInstances?: () => WaveformTrackerPlayer[]};
+
+declare global {
+    interface Window {
+        /** The script-tag global: the tracker singleton. */
+        WaveformTracker: WaveformTracker;
+    }
+}
+
 class WaveformTracker {
+    /**
+     * Forward currentTime jumps (seconds) below this are always credited as
+     * playback. A class-level constant, not a config option.
+     */
+    declare static SEEK_THRESHOLD: number;
+
+    /** Seconds of headroom added to the wall-clock allowance for large jumps. */
+    declare static SEEK_SLACK: number;
+
+    /** Share of the audio up to the complete threshold that must have been heard. */
+    declare static COMPLETE_ENGAGEMENT: number;
+
+    // `declare` emits nothing: these are assigned in the constructor exactly
+    // as before.
+    /** @internal */ declare config: ResolvedConfig | null;
+    /** @internal */ declare trackers: Map<WaveformTrackerPlayer, TrackerState>;
+    /** @internal */ declare debug: boolean;
+    /** @internal */ declare sessionId: string | null;
+    /** @internal */ declare listeners: {
+        ready: (e: CustomEvent<PlayerEventDetail>) => void;
+        destroy: (e: CustomEvent<Partial<PlayerEventDetail> | null>) => void;
+    } | null;
+
     constructor() {
         this.config = null;
         this.trackers = new Map();
@@ -20,9 +181,9 @@ class WaveformTracker {
      * Initialize tracker with configuration. Calling it again reconfigures
      * the tracker (players already tracked keep their state) rather than
      * adding a second set of listeners.
-     * @param {Object} config - Tracker configuration
+     * @param config - Tracker configuration
      */
-    init(config = {}) {
+    init(config: WaveformTrackerConfig = {}): void {
         // Default configuration
         this.config = {
             endpoint: config.endpoint || null,
@@ -66,8 +227,8 @@ class WaveformTracker {
             };
 
             // TRUE enables capturing phase
-            document.addEventListener('waveformplayer:ready', this.listeners.ready, true);
-            document.addEventListener('waveformplayer:destroy', this.listeners.destroy, true);
+            document.addEventListener('waveformplayer:ready', this.listeners.ready as EventListener, true);
+            document.addEventListener('waveformplayer:destroy', this.listeners.destroy as EventListener, true);
         }
 
         // Track any existing players that might already be initialized
@@ -79,7 +240,7 @@ class WaveformTracker {
     /**
      * Track all existing WaveformPlayer instances
      */
-    trackAllPlayers() {
+    trackAllPlayers(): void {
         if (typeof WaveformPlayer !== 'undefined' && WaveformPlayer.getAllInstances) {
             const players = WaveformPlayer.getAllInstances();
             players.forEach(player => this.trackPlayer(player));
@@ -88,9 +249,9 @@ class WaveformTracker {
 
     /**
      * Track a specific player instance
-     * @param {WaveformPlayer} player - Player instance to track
+     * @param player - Player instance to track
      */
-    trackPlayer(player) {
+    trackPlayer(player: WaveformTrackerPlayer): void {
         // Nothing to report to before init() or after reset()
         if (!this.config) {
             this.warn('Call init() before tracking players');
@@ -108,7 +269,7 @@ class WaveformTracker {
             return;
         }
 
-        const tracker = {
+        const tracker: TrackerState = {
             player: player,
             // The URL this state belongs to. load()/loadTrack() swap tracks on
             // the same player without firing `ended`, so syncTrack() compares
@@ -220,8 +381,8 @@ class WaveformTracker {
         // Add event listeners
         container.addEventListener('waveformplayer:play', tracker.handlers.play);
         container.addEventListener('waveformplayer:pause', tracker.handlers.pause);
-        container.addEventListener('waveformplayer:timeupdate', tracker.handlers.timeupdate);
-        container.addEventListener('waveformplayer:ended', tracker.handlers.ended);
+        container.addEventListener('waveformplayer:timeupdate', tracker.handlers.timeupdate as EventListener);
+        container.addEventListener('waveformplayer:ended', tracker.handlers.ended as EventListener);
     }
 
     /**
@@ -230,9 +391,10 @@ class WaveformTracker {
      * Engagement and sent events are per track, but a player instance can
      * outlive many tracks. Without this, a track swapped in mid-play inherited
      * the previous track's elapsed time and never re-sent play/listen/complete.
-     * @param {Object} tracker - Tracker state for a player
+     * @param tracker - Tracker state for a player
+     * @internal
      */
-    syncTrack(tracker) {
+    syncTrack(tracker: TrackerState): void {
         const url = tracker.player.options?.url;
         if (url === tracker.url) return;
 
@@ -254,10 +416,11 @@ class WaveformTracker {
      * time that passed: background tabs throttle the player's timeupdates, so
      * minutes of real listening can arrive as one jump. Anything clearly
      * beyond elapsed real time is a seek and isn't credited.
-     * @param {Object} tracker - Tracker state for a player
-     * @param {number} currentTime - Playhead position (seconds)
+     * @param tracker - Tracker state for a player
+     * @param currentTime - Playhead position (seconds)
+     * @internal
      */
-    accumulate(tracker, currentTime) {
+    accumulate(tracker: TrackerState, currentTime: number): void {
         const now = Date.now();
         if (tracker.lastTime !== null) {
             const delta = currentTime - tracker.lastTime;
@@ -274,22 +437,24 @@ class WaveformTracker {
      * Most media time (seconds) that could have played since lastWall: the
      * wall time at the current rate, with 50% headroom for timer jitter plus
      * SEEK_SLACK. External mode has no audio element, so assumes 1x.
-     * @param {Object} tracker - Tracker state for a player
-     * @param {number} now - Current Date.now()
+     * @param tracker - Tracker state for a player
+     * @param now - Current Date.now()
+     * @internal
      */
-    playableSince(tracker, now) {
-        const wall = (now - tracker.lastWall) / 1000;
+    playableSince(tracker: TrackerState, now: number): number {
+        const wall = (now - tracker.lastWall!) / 1000;
         const rate = tracker.player.audio?.playbackRate ?? 1;
         return wall * rate * 1.5 + WaveformTracker.SEEK_SLACK;
     }
 
     /**
      * Fire any play/listen/complete events whose threshold has been reached.
-     * @param {Object} tracker - Tracker state for a player
-     * @param {number} currentTime - Playhead position (seconds)
-     * @param {number} duration - Track duration (seconds)
+     * @param tracker - Tracker state for a player
+     * @param currentTime - Playhead position (seconds)
+     * @param duration - Track duration (seconds)
+     * @internal
      */
-    checkEvents(tracker, currentTime, duration) {
+    checkEvents(tracker: TrackerState, currentTime: number, duration: number): void {
         if (!this.config) return;
 
         const totalElapsed = tracker.elapsedTime;
@@ -327,10 +492,11 @@ class WaveformTracker {
      * Normalise an events threshold. A missing key, null or false disables
      * the event; 0 is a real threshold (fire on the first check after play).
      * Numeric strings are accepted, as the old truthy check did.
-     * @param {*} value - Configured threshold
-     * @returns {number|null} The threshold, or null when disabled
+     * @param value - Configured threshold
+     * @returns The threshold, or null when disabled
+     * @internal
      */
-    threshold(value) {
+    threshold(value: unknown): number | null {
         if (value == null || value === false || value === '') return null;
         const number = Number(value);
         return Number.isFinite(number) ? number : null;
@@ -340,21 +506,22 @@ class WaveformTracker {
      * Run the event checks unthrottled at the last known position, so
      * thresholds crossed inside the 1s throttle window aren't lost when
      * playback stops (pause) or tracking ends (untrack/destroy).
-     * @param {Object} tracker - Tracker state for a player
+     * @param tracker - Tracker state for a player
+     * @internal
      */
-    flush(tracker) {
+    flush(tracker: TrackerState): void {
         if (!tracker.isTracking) return;
         // A track swapped in since the last timeupdate owns nothing yet.
         this.syncTrack(tracker);
         if (tracker.lastDuration === null) return;
-        this.checkEvents(tracker, tracker.lastPosition, tracker.lastDuration);
+        this.checkEvents(tracker, tracker.lastPosition!, tracker.lastDuration);
     }
 
     /**
      * Stop tracking a specific player
-     * @param {WaveformPlayer} player - Player instance to stop tracking
+     * @param player - Player instance to stop tracking
      */
-    untrackPlayer(player) {
+    untrackPlayer(player: WaveformTrackerPlayer): void {
         const tracker = this.trackers.get(player);
         if (!tracker) return;
 
@@ -366,8 +533,8 @@ class WaveformTracker {
         if (container && tracker.handlers) {
             container.removeEventListener('waveformplayer:play', tracker.handlers.play);
             container.removeEventListener('waveformplayer:pause', tracker.handlers.pause);
-            container.removeEventListener('waveformplayer:timeupdate', tracker.handlers.timeupdate);
-            container.removeEventListener('waveformplayer:ended', tracker.handlers.ended);
+            container.removeEventListener('waveformplayer:timeupdate', tracker.handlers.timeupdate as EventListener);
+            container.removeEventListener('waveformplayer:ended', tracker.handlers.ended as EventListener);
         }
 
         // Remove from trackers
@@ -377,8 +544,9 @@ class WaveformTracker {
 
     /**
      * Send tracking event
+     * @internal
      */
-    sendEvent(tracker, eventType, time, duration) {
+    sendEvent(tracker: TrackerState, eventType: WaveformTrackerEvent, time: number, duration: number): void {
         // Validate required fields
         if (!tracker.player?.options?.url) {
             this.warn('Missing URL for event; skipping');
@@ -390,7 +558,7 @@ class WaveformTracker {
             return;
         }
 
-        const payload = {
+        const payload: WaveformTrackerPayload = {
             event: eventType,
             url: tracker.player.options.url,
             time: time,
@@ -398,7 +566,7 @@ class WaveformTracker {
             // serialises as null; send 0 for "unknown" so it stays a number.
             duration: Number.isFinite(duration) ? Math.floor(duration) : 0,
             page: window.location.pathname,
-            ...this.config.metadata
+            ...this.config!.metadata
         };
 
         if (this.sessionId) {
@@ -413,9 +581,9 @@ class WaveformTracker {
         this.log('Sending event:', payload);
 
         // Use custom handler if provided
-        if (this.config.handler) {
+        if (this.config!.handler) {
             try {
-                this.config.handler(payload);
+                this.config!.handler(payload);
             } catch (error) {
                 this.error('Custom handler threw:', error);
             }
@@ -424,9 +592,9 @@ class WaveformTracker {
 
         // Otherwise POST to endpoint. 'complete' and 'listen' are terminal /
         // near-unload events, so deliver them in a way that survives unload.
-        if (this.config.endpoint) {
+        if (this.config!.endpoint) {
             const terminal = eventType === 'complete' || eventType === 'listen';
-            this.send(this.config.endpoint, payload, terminal);
+            this.send(this.config!.endpoint, payload, terminal);
         }
     }
 
@@ -447,11 +615,12 @@ class WaveformTracker {
      * fetch uses credentials only same-origin, so a wildcard endpoint that
      * answers the preflight for Content-Type works.
      *
-     * @param {string} endpoint - Destination URL
-     * @param {Object} payload - Event payload
-     * @param {boolean} terminal - Whether this is a terminal/near-unload event
+     * @param endpoint - Destination URL
+     * @param payload - Event payload
+     * @param terminal - Whether this is a terminal/near-unload event
+     * @internal
      */
-    send(endpoint, payload, terminal = false) {
+    send(endpoint: string, payload: WaveformTrackerPayload, terminal: boolean = false): void {
         const body = JSON.stringify(payload);
         const hasFetch = typeof fetch === 'function';
 
@@ -476,7 +645,7 @@ class WaveformTracker {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                ...this.config.headers
+                ...this.config!.headers
             },
             body: body,
             keepalive: terminal
@@ -489,12 +658,13 @@ class WaveformTracker {
      * Whether a terminal event may go by sendBeacon: the API exists, no
      * custom headers are configured (a beacon can't set them), and the
      * endpoint is same-origin or fetch is unavailable (see send()).
-     * @param {string} endpoint - Destination URL
-     * @param {boolean} hasFetch - Whether fetch is available
+     * @param endpoint - Destination URL
+     * @param hasFetch - Whether fetch is available
+     * @internal
      */
-    canBeacon(endpoint, hasFetch) {
-        const hasCustomHeaders = this.config.headers
-            && Object.keys(this.config.headers).length > 0;
+    canBeacon(endpoint: string, hasFetch: boolean): boolean {
+        const hasCustomHeaders = this.config!.headers
+            && Object.keys(this.config!.headers).length > 0;
         if (hasCustomHeaders
             || typeof navigator === 'undefined'
             || typeof navigator.sendBeacon !== 'function') {
@@ -505,9 +675,10 @@ class WaveformTracker {
 
     /**
      * Whether an endpoint (absolute or relative) is on the page's origin.
-     * @param {string} endpoint - Destination URL
+     * @param endpoint - Destination URL
+     * @internal
      */
-    isSameOrigin(endpoint) {
+    isSameOrigin(endpoint: string): boolean {
         try {
             return new URL(endpoint, window.location.href).origin === window.location.origin;
         } catch (error) {
@@ -517,15 +688,17 @@ class WaveformTracker {
 
     /**
      * Generate session ID
+     * @internal
      */
-    generateSessionId() {
+    generateSessionId(): string {
         return Math.random().toString(36).substring(2) + Date.now().toString(36);
     }
 
     /**
      * Debug logging - only emitted when debug mode is enabled.
+     * @internal
      */
-    log(...args) {
+    log(...args: unknown[]): void {
         if (this.debug) {
             console.log('[WaveformTracker]', ...args);
         }
@@ -534,16 +707,18 @@ class WaveformTracker {
     /**
      * Recoverable / configuration warning - always emitted so integration
      * mistakes surface even when debug mode is off.
+     * @internal
      */
-    warn(...args) {
+    warn(...args: unknown[]): void {
         console.warn('[WaveformTracker]', ...args);
     }
 
     /**
      * Genuine failure - always emitted so dropped events and thrown handlers
      * surface even when debug mode is off.
+     * @internal
      */
-    error(...args) {
+    error(...args: unknown[]): void {
         console.error('[WaveformTracker]', ...args);
     }
 
@@ -551,15 +726,15 @@ class WaveformTracker {
      * Reset tracker - removes all tracking, including the document
      * listeners, so players created afterwards are ignored until init()
      */
-    reset() {
+    reset(): void {
         // Untrack all players
         this.trackers.forEach((tracker, player) => {
             this.untrackPlayer(player);
         });
 
         if (this.listeners) {
-            document.removeEventListener('waveformplayer:ready', this.listeners.ready, true);
-            document.removeEventListener('waveformplayer:destroy', this.listeners.destroy, true);
+            document.removeEventListener('waveformplayer:ready', this.listeners.ready as EventListener, true);
+            document.removeEventListener('waveformplayer:destroy', this.listeners.destroy as EventListener, true);
             this.listeners = null;
         }
 
@@ -571,8 +746,8 @@ class WaveformTracker {
     /**
      * Get tracking stats
      */
-    getStats() {
-        const stats = [];
+    getStats(): WaveformTrackerStats[] {
+        const stats: WaveformTrackerStats[] = [];
         this.trackers.forEach((tracker, player) => {
             stats.push({
                 url: player.options?.url || 'unknown',
@@ -588,7 +763,7 @@ class WaveformTracker {
     /**
      * Get number of tracked players
      */
-    getTrackedCount() {
+    getTrackedCount(): number {
         return this.trackers.size;
     }
 }
@@ -615,3 +790,7 @@ if (typeof window !== 'undefined') {
 
 // ES6 export
 export default tracker;
+
+// The singleton's class, as a type only: 1.x never exported the class
+// itself, and still does not.
+export type {WaveformTracker};
